@@ -3,6 +3,7 @@ package dblite
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -162,5 +163,126 @@ func TestConcurrency(t *testing.T) {
 
 	for i := 0; i < 200; i++ {
 		<-done
+	}
+}
+
+func TestEncryption(t *testing.T) {
+	dbFile, err := os.CreateTemp("", "dblite_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(dbFile.Name())
+
+	encryptionKey := []byte("0123456789abcdef")
+	db, err := NewDBLite(dbFile.Name(), WithEncryption(encryptionKey))
+	if err != nil {
+		t.Fatalf("Failed to create DBLite: %v", err)
+	}
+	defer db.Close()
+
+	err = db.Put("secret", "This is a secret message")
+	if err != nil {
+		t.Fatalf("Failed to put encrypted value: %v", err)
+	}
+
+	var retrievedSecret string
+	err = db.Get("secret", &retrievedSecret)
+	if err != nil {
+		t.Fatalf("Failed to get encrypted value: %v", err)
+	}
+
+	if retrievedSecret != "This is a secret message" {
+		t.Errorf("Expected 'This is a secret message', got '%s'", retrievedSecret)
+	}
+
+	// Verify that the data is actually encrypted in the file
+	fileContents, err := os.ReadFile(dbFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to read file contents: %v", err)
+	}
+	if strings.Contains(string(fileContents), "This is a secret message") {
+		t.Errorf("Found unencrypted data in file")
+	}
+}
+
+func TestCompression(t *testing.T) {
+	dbFile, err := os.CreateTemp("", "dblite_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(dbFile.Name())
+
+	db, err := NewDBLite(dbFile.Name(), WithCompression())
+	if err != nil {
+		t.Fatalf("Failed to create DBLite: %v", err)
+	}
+	defer db.Close()
+
+	largeString := strings.Repeat("abcdefghijklmnopqrstuvwxyz", 1000)
+
+	err = db.Put("large_data", largeString)
+	if err != nil {
+		t.Fatalf("Failed to put compressed value: %v", err)
+	}
+
+	var retrievedLargeString string
+	err = db.Get("large_data", &retrievedLargeString)
+	if err != nil {
+		t.Fatalf("Failed to get compressed value: %v", err)
+	}
+
+	if retrievedLargeString != largeString {
+		t.Errorf("Retrieved data doesn't match original data")
+	}
+
+	fileInfo, err := os.Stat(dbFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to get file info: %v", err)
+	}
+	if fileInfo.Size() >= int64(len(largeString)) {
+		t.Errorf("File size (%d) is not smaller than uncompressed data size (%d)", fileInfo.Size(), len(largeString))
+	}
+}
+
+func TestEncryptionAndCompression(t *testing.T) {
+	dbFile, err := os.CreateTemp("", "dblite_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(dbFile.Name())
+
+	encryptionKey := []byte("0123456789abcdef")
+	db, err := NewDBLite(dbFile.Name(), WithEncryption(encryptionKey), WithCompression())
+	if err != nil {
+		t.Fatalf("Failed to create DBLite: %v", err)
+	}
+	defer db.Close()
+
+	largeString := strings.Repeat("abcdefghijklmnopqrstuvwxyz", 1000)
+
+	err = db.Put("large_secret", largeString)
+	if err != nil {
+		t.Fatalf("Failed to put compressed and encrypted value: %v", err)
+	}
+
+	var retrievedLargeString string
+	err = db.Get("large_secret", &retrievedLargeString)
+	if err != nil {
+		t.Fatalf("Failed to get compressed and encrypted value: %v", err)
+	}
+
+	if retrievedLargeString != largeString {
+		t.Errorf("Retrieved data doesn't match original data")
+	}
+
+	fileContents, err := os.ReadFile(dbFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to read file contents: %v", err)
+	}
+	if strings.Contains(string(fileContents), "abcdefghijklmnopqrstuvwxyz") {
+		t.Errorf("Found unencrypted data in file")
+	}
+	if int64(len(fileContents)) >= int64(len(largeString)) {
+		t.Errorf("File size (%d) is not smaller than uncompressed data size (%d)", len(fileContents), len(largeString))
 	}
 }
