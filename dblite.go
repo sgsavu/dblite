@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 )
 
 type DBLite struct {
 	file     *os.File
 	fileName string
+	mu       sync.RWMutex
 }
 
 func NewDBLite(filename string) (*DBLite, error) {
@@ -22,6 +24,9 @@ func NewDBLite(filename string) (*DBLite, error) {
 }
 
 func (db *DBLite) Put(key string, value interface{}) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	jsonValue, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -31,6 +36,9 @@ func (db *DBLite) Put(key string, value interface{}) error {
 }
 
 func (db *DBLite) Get(key string, value interface{}) error {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
 	_, err := db.file.Seek(0, 0)
 	if err != nil {
 		return err
@@ -53,6 +61,9 @@ func (db *DBLite) Get(key string, value interface{}) error {
 }
 
 func (db *DBLite) Delete(key string) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	tempFile, err := os.CreateTemp("", "dblite")
 	if err != nil {
 		return err
@@ -106,6 +117,9 @@ func (db *DBLite) Delete(key string) error {
 }
 
 func (db *DBLite) Wipe() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	if err := db.file.Close(); err != nil {
 		return err
 	}
@@ -120,5 +134,8 @@ func (db *DBLite) Wipe() error {
 }
 
 func (db *DBLite) Close() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	return db.file.Close()
 }
