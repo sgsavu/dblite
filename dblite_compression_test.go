@@ -21,7 +21,7 @@ func TestCompression(t *testing.T) {
 
 	largeString := strings.Repeat("abcdefghijklmnopqrstuvwxyz", 1000)
 
-	err = db.Put("large_data", largeString)
+	err = db.Set("large_data", largeString)
 	if err != nil {
 		t.Fatalf("Failed to put compressed value: %v", err)
 	}

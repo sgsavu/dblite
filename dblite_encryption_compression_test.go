@@ -22,7 +22,7 @@ func TestEncryptionAndCompression(t *testing.T) {
 
 	largeString := strings.Repeat("abcdefghijklmnopqrstuvwxyz", 1000)
 
-	err = db.Put("large_secret", largeString)
+	err = db.Set("large_secret", largeString)
 	if err != nil {
 		t.Fatalf("Failed to put compressed and encrypted value: %v", err)
 	}

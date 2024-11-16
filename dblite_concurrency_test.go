@@ -24,7 +24,7 @@ func TestConcurrency(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		go func(i int) {
 			key := fmt.Sprintf("key%d", i)
-			err := db.Put(key, fmt.Sprintf("value%d", i))
+			err := db.Set(key, fmt.Sprintf("value%d", i))
 			if err != nil {
 				t.Errorf("Failed to put value: %v", err)
 			}

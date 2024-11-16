@@ -20,7 +20,7 @@ func TestEncryption(t *testing.T) {
 	}
 	defer db.Close()
 
-	err = db.Put("secret", "This is a secret message")
+	err = db.Set("secret", "This is a secret message")
 	if err != nil {
 		t.Fatalf("Failed to put encrypted value: %v", err)
 	}

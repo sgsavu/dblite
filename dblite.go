@@ -9,12 +9,15 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
 )
+
+var ErrKeyNotFound = errors.New("key not found")
 
 type DBLite struct {
 	file           *os.File
@@ -52,7 +55,17 @@ func WithCompression() func(*DBLite) {
 	}
 }
 
-func (db *DBLite) Put(key string, value interface{}) error {
+func (db *DBLite) Set(key string, value interface{}) error {
+	v := make(map[string]interface{})
+	err := db.Get(key, &v)
+	if err != nil {
+		if !errors.Is(err, ErrKeyNotFound) {
+			return fmt.Errorf("failed to get during set replacement comparison")
+		}
+	} else {
+		db.Delete(key)
+	}
+
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -121,7 +134,7 @@ func (db *DBLite) Get(key string, value interface{}) error {
 		return err
 	}
 
-	return fmt.Errorf("key not found")
+	return ErrKeyNotFound
 }
 
 func (db *DBLite) Delete(key string) error {
@@ -130,13 +143,15 @@ func (db *DBLite) Delete(key string) error {
 
 	tempFile, err := os.CreateTemp("", "dblite")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create temp file: %v", err)
 	}
-	defer os.Remove(tempFile.Name())
+	defer func() {
+		tempFile.Close()
+		os.Remove(tempFile.Name())
+	}()
 
-	_, err = db.file.Seek(0, 0)
-	if err != nil {
-		return err
+	if _, err = db.file.Seek(0, 0); err != nil {
+		return fmt.Errorf("failed to seek file: %v", err)
 	}
 
 	scanner := bufio.NewScanner(db.file)
@@ -148,35 +163,50 @@ func (db *DBLite) Delete(key string) error {
 			found = true
 			continue
 		}
-		_, err := tempFile.WriteString(line + "\n")
-		if err != nil {
-			return err
+		if _, err := tempFile.WriteString(line + "\n"); err != nil {
+			return fmt.Errorf("failed to write to temp file: %v", err)
 		}
 	}
-
 	if err := scanner.Err(); err != nil {
-		return err
+		return fmt.Errorf("error reading file: %v", err)
 	}
 
 	if err := db.file.Close(); err != nil {
-		return err
-	}
-	if err := tempFile.Close(); err != nil {
-		return err
+		return fmt.Errorf("failed to close original file: %v", err)
 	}
 
-	if err := os.Rename(tempFile.Name(), db.fileName); err != nil {
-		return err
+	if err := copyFile(tempFile.Name(), db.fileName); err != nil {
+		return fmt.Errorf("failed to replace file: %v", err)
 	}
 
 	db.file, err = os.OpenFile(db.fileName, os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to reopen file: %v", err)
 	}
 
 	if !found {
-		return fmt.Errorf("key not found")
+		return ErrKeyNotFound
 	}
+	return nil
+}
+
+func copyFile(srcFile, destFile string) error {
+	src, err := os.Open(srcFile)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %v", err)
+	}
+	defer src.Close()
+
+	dest, err := os.Create(destFile)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %v", err)
+	}
+	defer dest.Close()
+
+	if _, err := io.Copy(dest, src); err != nil {
+		return fmt.Errorf("failed to copy file content: %v", err)
+	}
+
 	return nil
 }
 
