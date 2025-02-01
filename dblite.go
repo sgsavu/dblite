@@ -28,7 +28,7 @@ type DBLite struct {
 }
 
 func NewDBLite(filename string, options ...func(*DBLite)) (*DBLite, error) {
-	file, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0755)
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +91,29 @@ func (db *DBLite) Set(key string, value interface{}) error {
 	encodedValue := base64.StdEncoding.EncodeToString(jsonValue)
 	_, err = db.file.WriteString(fmt.Sprintf("%s=%s\n", key, encodedValue))
 	return err
+}
+
+func (db *DBLite) Len() (uint64, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	_, err := db.file.Seek(0, 0)
+	if err != nil {
+		return 0, err
+	}
+
+	var lines uint64 = 0
+
+	scanner := bufio.NewScanner(db.file)
+	for scanner.Scan() {
+		lines += 1
+	}
+
+	if err := scanner.Err(); err != nil {
+		return 0, err
+	}
+
+	return lines, nil
 }
 
 func (db *DBLite) Get(key string, value interface{}) error {
